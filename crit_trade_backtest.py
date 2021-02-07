@@ -19,6 +19,7 @@ class TestStrategy(bt.Strategy):
         ''' Logging function fot this strategy'''
         dt = dt or self.datas[0].datetime.date(0)
         print('%s, %s' % (dt.isoformat(), txt))
+        
 
     def __init__(self):
         # Keep a reference to the "close" line in the data[0] dataseries
@@ -30,6 +31,10 @@ class TestStrategy(bt.Strategy):
         self.max_remaining_days = 1
         self.day = 0
         self.current_max = 0
+        self.high_break = False
+        self.high_break_days = 0
+        self.buy_price = 0
+        self.buyat = 0
         
 
         # To keep track of pending orders
@@ -61,12 +66,6 @@ class TestStrategy(bt.Strategy):
         if len(self.three_month_list) < 60:
             self.three_month_list.append(self.datahigh[0])
             self.current_max = max(self.three_month_list)
-        #elif len(three_month_list) == 60 and fill_list = False: 
-            #self.current_max = max(three_month_list)
-            #fill_list = True
-            #max_remaining_days = 59
-            #three_month_list.pop(0)
-            #threemonth_list.append(self.datahigh[0])
         else:
             self.max_remaining_days -= 1
             self.three_month_list.pop(0)
@@ -75,19 +74,46 @@ class TestStrategy(bt.Strategy):
             if self.max_remaining_days == 0 :
                 self.current_max = max(self.three_month_list)
                 self.max_remaining_days = 60
-                print('day: ', self.day)
-                print('New max (run out): ', self.current_max)
+                #print('day: ', self.day)
+                #print('New max (run out): ', self.current_max)
 
             if self.datahigh[0] > self.current_max:
                 self.current_max = self.datahigh[0]
                 self.max_remaining_days = 60
-                high_break = True
+                self.high_break = True
+                self.high_break_days = 10
 
-                print('day: ', self.day)
-                print('New max (higher value): ', self.current_max)
-        print('current 3-month max: ', self.current_max)
+                if self.day >= 15:
+                    atr_list = []
+                    for i in range(14):
+                        tr = max(self.datahigh[0-i] - self.datalow[0-i], 
+                        abs(self.datahigh[0-i] - self.dataclose[-1-i]),
+                        abs(self.datalow[0-i] - self.dataclose[-1-i]))
+                        atr_list.append(tr)
+                    atr = sum(atr_list)/14
+                    self.buy_price = self.datalow[0] #- 1.5*atr
+
+                #print('day: ', self.day)
+                print('buy price: ', self.buy_price)
+                #print('New max (higher value): ', self.current_max)
+        #print('current 3-month max: ', self.current_max)
         self.day += 1
+        self.high_break_days -= 1  
+        
+        if self.high_break_days == 0:
+            self.high_break = False
+        
+        """ if self.day >= 15:
+            atr_list = []
+            for i in range(14):
+                tr = max(self.datahigh[0-i] - self.datalow[0-i], 
+                abs(self.datahigh[0-i] - self.dataclose[-1-i]),
+                abs(self.datalow[0-i] - self.dataclose[-1-i]))
+                atr_list.append(tr)
+            atr = sum(atr_list)/14 """
 
+            #print(atr_list)
+            #print(atr)
         #self.log('Close, %.2f' % self.dataclose[0])
         #print(self.dataopen[0], self.datahigh[0], self.datalow[0], self.dataclose[0])
 
@@ -98,7 +124,21 @@ class TestStrategy(bt.Strategy):
         # Check if we are in the market
         if not self.position:
             # Not yet ... we MIGHT BUY if ...
-            if high_break = True 
+            #print(self.high_break)
+            if self.high_break == True:
+                #print(self.high_break_days)
+                #print(self.dataclose[0], self.buy_price)
+                if self.dataclose[0] <= self.buy_price:
+                    self.high_break = False
+                    self.log('BUY CREATE, %.2f' % self.dataclose[0])
+                    self.order = self.buy()
+                    self.buyat = self.dataopen[1]
+
+                #if self.min
+                #if 
+                #print(self.high_break_days)
+                #self.log('BUY CREATE, %.2f' % self.dataclose[0])
+                #self.order = self.buy()
             
 
             """if self.dataclose[0] < self.dataclose[-1]:
@@ -111,17 +151,20 @@ class TestStrategy(bt.Strategy):
                         self.log('BUY CREATE, %.2f' % self.dataclose[0])
 
                         # Keep track of the created order to avoid a 2nd order
-                        self.order = self.buy()
+                        self.order = self.buy()"""
 
         else:
 
             # Already in the market ... we might sell
-            if len(self) >= (self.bar_executed + 5):
+            #if len(self) >= (self.bar_executed + 5):
+            if self.dataclose[-2] < self.dataclose[-1] and self.dataclose[-3] < self.dataclose[-2]:
                 # SELL, SELL, SELL!!! (with all possible default parameters)
                 self.log('SELL CREATE, %.2f' % self.dataclose[0])
 
                 # Keep track of the created order to avoid a 2nd order
-                self.order = self.sell()"""
+                self.order = self.sell()
+
+                print('net value from trade: ', self.dataopen[1] - self.buyat)
 
 
 if __name__ == '__main__':
